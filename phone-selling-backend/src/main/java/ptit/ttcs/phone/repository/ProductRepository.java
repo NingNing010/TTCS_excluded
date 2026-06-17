@@ -1,0 +1,43 @@
+package ptit.ttcs.phone.repository;
+
+import java.util.List;
+import java.util.Optional;
+
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import jakarta.persistence.LockModeType;
+import ptit.ttcs.phone.entity.Product;
+
+@Repository
+public interface ProductRepository extends JpaRepository<Product, Integer> {
+  List<Product> findByNameContainingIgnoreCase(String keyword);
+
+  boolean existsByNameIgnoreCase(String name);
+
+  boolean existsByNameIgnoreCaseAndIdNot(String name, Integer id);
+
+  @EntityGraph(attributePaths = "brand")
+  List<Product> findByStockAvailableGreaterThanOrderByUpdatedAtDesc(Integer stockAvailable, Pageable pageable);
+
+  @EntityGraph(attributePaths = "brand")
+  List<Product> findByOrderByReleaseDateDesc(Pageable pageable);
+  
+  @Query("SELECT p FROM Product p JOIN FETCH p.brand")
+  List<Product> findAllWithBrand();
+
+  @Query("SELECT p FROM Product p JOIN FETCH p.brand WHERE p.id = :productId")
+  Optional<Product> findDetailById(@Param("productId") Integer productId);
+  
+  Optional<Product> getProductById(Integer productId);
+  
+//  select for update
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT p FROM Product p WHERE p.id = :id")
+  Optional<Product> getProductByIdForUpdate(@Param("id") Integer productId);
+}

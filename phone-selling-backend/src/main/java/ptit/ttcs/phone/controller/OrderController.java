@@ -1,0 +1,95 @@
+package ptit.ttcs.phone.controller;
+
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import ptit.ttcs.phone.dto.*;
+import ptit.ttcs.phone.service.OrderService;
+import ptit.ttcs.phone.service.OrderStatusService;
+import ptit.ttcs.phone.service.WarrantyService;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/orders")
+@Slf4j
+@RequiredArgsConstructor
+public class OrderController {
+  
+  private final OrderService orderService;
+  private final OrderStatusService orderStatusService;
+  private final WarrantyService warrantyService;
+  
+  @PreAuthorize("hasRole('USER')")
+  @PostMapping("/place")
+  public ResponseEntity<OrderResponse> placeOrder(
+    Authentication authentication,
+    @RequestBody @Valid OrderRequest request,
+    HttpServletRequest httpServletRequest
+  ) {
+    String clientIp = getClientIp(httpServletRequest);
+    OrderResponse res = orderService.processOrder(authentication, request, clientIp);
+    return ResponseEntity.status(HttpStatus.OK).body(res);
+  }
+
+  @GetMapping("/status")
+  public ResponseEntity<OrderStatusResponse> lookupOrderStatus(@ModelAttribute @Valid OrderStatusLookupRequest request) {
+    return ResponseEntity.ok(orderStatusService.lookupOrderStatus(request.getPhone(), request.getOrderId()));
+  }
+
+  @PreAuthorize("hasRole('USER')")
+  @GetMapping("/history")
+  public ResponseEntity<PurchaseHistoryResponse> getPurchaseHistory(
+    Authentication authentication,
+    Pageable pageable
+  ) {
+    int userId = (Integer) authentication.getPrincipal();
+    PurchaseHistoryResponse response = orderService.getPurchaseHistory(userId, pageable);
+    return ResponseEntity.ok(response);
+  }
+
+  @PreAuthorize("hasRole('USER')")
+  @PostMapping("/{orderId}/cancel")
+  public ResponseEntity<OrderResponse> cancelOrder(
+    Authentication authentication,
+    @PathVariable Integer orderId,
+    @RequestBody @Valid CancelOrderRequest request
+  ) {
+    int userId = (Integer) authentication.getPrincipal();
+    OrderResponse response = orderService.cancelOrder(userId, orderId, request.getCancelReason());
+    return ResponseEntity.ok(response);
+  }
+  
+  @GetMapping("/{orderId}/warrantyCheck")
+  public ResponseEntity<List<WarrantyItemResponse>> warrantyCheck(
+      Authentication authentication,
+      @PathVariable("orderId") int orderId
+  ) {
+    return warrantyService.checkWarranty((int) authentication.getPrincipal(), orderId);
+  }
+  
+  private String getClientIp(HttpServletRequest request) {
+    // Check forwarded headers first — in case you're behind a proxy/nginx
+    String ip = request.getHeader("X-Forwarded-For");
+    if (ip != null && !ip.isBlank() && !"unknown".equalsIgnoreCase(ip)) {
+      // X-Forwarded-For can contain multiple IPs — take the first one
+      return ip.split(",")[0].trim();
+    }
+    return request.getRemoteAddr();
+  }
+  
+}
